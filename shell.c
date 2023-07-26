@@ -8,9 +8,13 @@
 #define MAX_CMD_LENGTH 1024
 #define MAX_ARGS 64
 
-void execute_command(char* args[]) {
+void execute_command(char* args[], int input_fd) {
     pid_t pid = fork();
     if (pid == 0) {
+        if (input_fd != STDIN_FILENO) {
+            dup2(input_fd, STDIN_FILENO);
+            close(input_fd);
+        }
         if (execvp(args[0], args) == -1) {
             perror("Command execution failed");
         }
@@ -41,10 +45,12 @@ int main() {
         printf("shell$ ");
         fflush(stdout);
 
+        // Read user input
         if (fgets(input, MAX_CMD_LENGTH, stdin) == NULL) {
             break;
         }
 
+        // Check for background process (ends with &)
         background = 0;
         int input_len = strlen(input);
         if (input_len > 1 && input[input_len - 2] == '&') {
@@ -52,8 +58,10 @@ int main() {
             input[input_len - 2] = '\n'; // Remove the '&'
         }
 
+        // Parse input into arguments
         parse_input(input, args);
 
+        // Handle built-in commands
         if (args[0] != NULL) {
             if (strcmp(args[0], "exit") == 0) {
                 break;
@@ -67,15 +75,17 @@ int main() {
             }
         }
 
+        // Execute command
         if (args[0] != NULL) {
             if (background) {
+                // Fork and execute in the background
                 pid_t bg_pid = fork();
                 if (bg_pid == 0) {
-                    execute_command(args);
+                    execute_command(args, STDIN_FILENO);
                     exit(EXIT_SUCCESS);
                 }
             } else {
-                execute_command(args);
+                execute_command(args, STDIN_FILENO);
             }
         }
     }
